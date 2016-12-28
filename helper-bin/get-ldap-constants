@@ -5,14 +5,12 @@ use v6;
 my Bool $found-data = False;
 my @constants;
 
-for 'lib/Net/LDAP/Constant.pm'.IO.lines -> $line {
+for 'lib/Net/LDAP/Constant.pm_old'.IO.lines -> $line {
     $line.chomp;
     $found-data = True if $line ~~ /^__DATA__$/;
     next unless $found-data;
     last if $line ~~ /^\=cut/;
-    # next unless $line ~~ /^\=item\s+(LDAP_\S+)\s+((.*)\\)/;
-    next unless $line ~~ /^\=item\s+(LDAP_\S+)/;
-    say $0, ", ", $1;
-#    my $protocol-const = :  
-#     say $line;
+    last if $line ~~ /^\=head2\sControl\sOIDs/;
+    next unless $line ~~ /^\=item\s+(LDAP_\S+)\s+\((.*)\)/;
+    say "constant $0 is export(:$0) = $1;";
 }
