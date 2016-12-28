@@ -1,0 +1,15 @@
+{
+    "perl": "6.c",
+    "name" : "Net::LDAP",
+    "version" : "0.0.1",
+    "description" : "LDAP client library",
+    "authors" : [
+        ["Douglas L. Jenkins"]
+    ],
+    "provides": {
+        "Net::LDAP": "lib/Net/LDAP"
+    },
+    "depends": [],
+    "resources": [],
+    "source-url": ""
+}

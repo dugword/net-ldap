@@ -1,0 +1,12 @@
+58634a05 @(#) $OpenLDAP: slapd 2.4.28 (Aug 29 2016 18:59:33) $
+	root@osx300.apple.com:/Library/Caches/com.apple.xbs/Binaries/OpenLDAP/OpenLDAP-523.30.2~8/TempContent/Objects/servers/slapd
+58634a05 daemon: SLAP_SOCK_INIT: dtblsize=4864
+58634a05 daemon_init: listen on ldap://localhost:389/
+58634a05 daemon_init: 1 listeners to open...
+ldap_url_parse_ext(ldap://localhost:389/)
+58634a05 daemon: bind(7) failed errno=13 (Permission denied)
+58634a05 daemon: bind(7) failed errno=13 (Permission denied)
+58634a05 slap_open_listener: failed on ldap://localhost:389/
+58634a05 slapd stopped.
+58634a05 connections_destroy: nothing to destroy.
+tlsst_destroy()
