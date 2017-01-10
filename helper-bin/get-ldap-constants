@@ -2,15 +2,23 @@
 
 use v6;
 
-my Bool $found-data = False;
-my @constants;
+get-constants;
 
-for 'lib/Net/LDAP/Constant.pm_old'.IO.lines -> $line {
-    $line.chomp;
-    $found-data = True if $line ~~ /^__DATA__$/;
-    next unless $found-data;
-    last if $line ~~ /^\=cut/;
-    last if $line ~~ /^\=head2\sControl\sOIDs/;
-    next unless $line ~~ /^\=item\s+(LDAP_\S+)\s+\((.*)\)/;
-    say "constant $0 is export(:$0) = $1;";
+sub get-constants {
+    my Bool $found-data = False;
+    my Bool $printed-header = False;
+    for 'lib/Net/LDAP/Constant.pm_old'.IO.lines -> $line {
+        $line.chomp;
+        $found-data = True if $line ~~ /^__DATA__$/;
+        next unless $found-data;
+        if $line ~~ /^ \=head2 \s+ (.*) \s* $/ {
+            say "# $0";
+        }
+        if $line ~~ /^ \=item \s+ (LDAP_\S+) \s+ \((.+)\) \s* [\[(.+)\]]? / {
+            say "constant $0 is export(:$0) = '$1';";
+            if $2 {
+                say "# Do something with this: $2";
+            }
+        };
+    }
 }

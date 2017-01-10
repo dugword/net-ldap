@@ -304,7 +304,9 @@ sub connect_ldapi {
 
 sub message {
   my $ldap = shift;
-  shift->new($ldap, @_);
+  my $shift = shift;
+  say "Shift hits the fan => $shift";
+  $shift->new($ldap, @_);
 }
 
 sub async {
