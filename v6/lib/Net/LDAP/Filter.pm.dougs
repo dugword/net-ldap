@@ -1,0 +1,213 @@
+use v6;
+
+# filter       = "(" filtercomp ")"
+# filtercomp   = and / or / not / item
+# and          = "&" filterlist
+# or           = "|" filterlist
+# not          = "!" filterlist
+# filterlist   = 1*filter
+# item         = simple / present / substring / extensible
+# simple       = attr filtertype value
+# filtertype   = equal / approx / greater / less
+# equal        = "="
+# approx       = "~="
+# greater      = ">="
+# less         = "<="
+# extensible   = "attr [":dn"] [":" matchingrule] ":=" value
+#                / [":dn"] ":" matchingrule ":=" value
+# present      = attr "=*"
+# substring    = attr "=" [initial] any [final]
+# initial      = value
+# any          = "*" *(value "*")
+# final        = value
+# attr         = AttributeDescription from Section 2.5 of RFC 4512
+# matchingrule = MatchingRuleId from Section 4.1.8 of RFC 4511
+# value        = AttributeValue from Section 4.1.6 of RFC 4511
+#              = with some characters encoded, see below
+#
+# Special Character Encodings
+# ---------------------------
+#    *               \2a, \*
+#    (               \28, \(
+#    )               \29, \)
+#    \               \5c, \\
+#    NUL             \00
+
+class Net::LDAP::Filter {
+    my %operator =
+        '&'  => 'and',
+        '|'  => 'or',
+        '!'  => 'not',
+        '='  => 'equalityMatch',
+        '~=' => 'approxMatch',
+        '>=' => 'greaterOrEqual',
+        '<=' => 'lessOrEqual',
+        ':=' => 'extensibleMatch',
+    ;
+
+    # Unescape
+    #   \xx where xx is a 2-digit hex number
+    #   \y  where y is one of ( ) \ *
+    my sub unescape($token is copy) {
+        if $token ~~ /
+            \\(<[ \d a..f A..F ]> ** 2 || <[()\\*]>)
+        / {
+            $token = $0.chars == 1 ?? $0 !! :16($0).chr;
+        }
+
+
+        return $token;
+    }
+
+    my sub escape($token) {
+        $token ~~ /
+            <[ \\ ( ) * \x00..\x1f \x7f..\xff ]>
+        /;
+
+        my $value = sprintf('\\%02x', $0.ord);
+
+        return $value;
+    }
+
+    my sub encode($attr, $op, $val) {
+
+        if $op eq ':=' {
+            unless $attr ~~ /^(<[- ; \d \w ]>) (\:dn)? (\:(\w+ || [\.\d]+ ))? $/ {
+                die "Bad attribute $attr";
+                return;
+            }
+
+            my ($type, $dn, $rule) = $0, $1, $3;
+
+            my %set =
+                extensibleMatch => {
+                    matchingRule => $rule,
+                    type         => $type.chars ?? $type !! Any,
+                    matchType    => unescape($val),
+                    dnAttributes => $dn ?? 1 !! Any,
+                },
+            ;
+
+        }
+
+        # Special Cases: present / substring match
+        if $op eq '=' {
+
+            if $val eq '*' {
+                return { present => $attr };
+            }
+
+            # If value contains unescaped *, then we have substring match
+            elsif $val ~~ s/^(( \\ . || <-[ \\ *]>+)*)\*// {
+                my @n;
+                my $type = 'initial';
+
+                while $val ~~ s/^(( \\ . || <-[ \\ * ]>+)*)\*// {
+                    @n.push( $type => unescape("$1") )
+                        if "$1".chars or $type eq 'any';
+
+                    $type = 'any';
+                }
+
+                @n.push( 'final' => unescape("$val") )
+                    if "$1".chars;
+
+                return (
+                    substrings => {
+                        type => $attr,
+                        substrings => @n.values,
+                    },
+                );
+            }
+        }
+
+
+        return (
+            %operator{$op} => {
+                attributeDesc => $attr,
+                assertionValue => unescape($val),
+            },
+        );
+    }
+
+    method parse($filter is copy) {
+        my @stack;
+        my @cur;
+        my $op;
+
+        if !defined $filter {
+            die 'Undefined filter';
+        }
+
+        $filter ~~ s/^\s*//;
+
+        $filter = '(' ~ $filter ~ ')' unless $filter ~~ /^\(/;
+
+        while $filter.chars {
+
+            # Process the start of (<op> (...)(...)), with <op> = [&!!]
+            if $filter ~~ s/^ \( \s* ( <[ & ! | ]> ) \s*// {
+                @stack.push([$op, @cur]);
+                $op = $0;
+                @cur = [];
+                next;
+            }
+
+            # Process the end of (<op> (...)(...)), with <op> = [&!|]
+            elsif $filter ~~ s/^ \) \s*// {
+                unless @stack {
+                    die 'Bad filter, unmatched )';
+                }
+
+                # dd @stack;
+                my $myop = $op;
+                my @mydata = @cur.values;
+                ($op, @cur) = (@stack.pop());
+
+                # Need to do more checking here
+                my %element;
+
+                if $myop eq '!' {
+                    die 'do this';
+                    %element = %operator{$myop} => @mydata[0];
+                }
+                else {
+                    %element = %operator{$myop} => @mydata[0];
+                }
+
+                @cur.push(%element);
+
+                next if @stack;
+            }
+
+            # Process (attr op string)
+            elsif $filter ~~ s/^
+                \( \s*
+                ( <[ -;.:\d\w ]> * <[ -;\d\w ]> ) \s*
+                ( <[ :~<> ]>?\= )
+                ( [ \\ . || <-[ \\ ( ) ]>+ ]* )
+                \)\s*
+            // {
+
+                @cur.push(encode("$0", "$1", "$2"));
+                next if @stack;
+            }
+
+            # If we get here then there is an error in the filter string
+            # so exit the loop with data in $filter
+            last;
+        }
+
+        if $filter.chars {
+            # If we have anything left in the filter, then there is a problem
+            die 'Bad filter, error before ' ~ $filter.substr(0, 20);
+        }
+
+        if @stack {
+            die 'Bad filter, unmatched (';
+        }
+
+        return @cur[1];
+    }
+
+}
